@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Offline Bitcoin Block Verification App</title>
+<style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { text-align: center; }
+        button { margin: 10px; padding: 10px; }
+        .section { margin-top: 20px; border: 1px solid #ccc; padding: 20px; }
+        .hidden { display: none; }
+        #results { white-space: pre-wrap; font-family: monospace; }
+    </style>
+</head>
+<body>
+<h1>Offline Bitcoin Block Verification App</h1>
+<button onclick="showSection('loadHashes')">Load Block Hashes</button>
+<button onclick="showSection('checkBlock')">Check Block</button>
+<button onclick="showSection('showTx')">Show Transactions</button>
+<button onclick="showSection('updateHashes')">Update Block Hash File</button>
+<button onclick="showSection('downloadBlockSection')">Download Block</button>
+<div class="section hidden" id="downloadBlockSection">
+<h2>Download Block</h2>
+<input id="blockHeightDownload" placeholder="Enter block height" type="number"/>
+<button onclick="downloadBlock()">Fetch and Download</button>
+</div>
+<div class="section hidden" id="showTx">
+<h2>Show Transactions</h2>
+<input accept=".json" id="blockFile" type="file"/>
+<input id="showAllAddresses" type="checkbox"/>
+<label for="showAllAddresses">Show all addresses involved in transactions</label>
+<input id="address" placeholder="Optional: Filter by address" type="text"/>
+<button onclick="showTransactions()">Show Transactions</button>
+</div>
+<div class="section hidden" id="checkBlock">
+<h2>Check Block</h2>
+<input accept=".json" id="checkBlockFile" type="file"/>
+<button onclick="checkBlock()">Check Block</button>
+</div>
+<div class="section hidden" id="loadHashes">
+<h2>Load Block Hashes</h2>
+<input accept=".txt" id="hashesFile" type="file"/>
+<button onclick="loadBlockHashes()">Load Hashes</button>
+</div>
+<div class="section hidden" id="updateHashes">
+<h2>Update Block Hash File</h2>
+<input accept=".txt" id="hashesFileUpd" type="file"/>
+<button onclick="updateBlockHashFile()">Update Block Hash File</button>
+</div>
+<div class="section hidden">
+<h2>Bitcoin Core RPC Settings</h2>
+<input id="rpcServer" placeholder="RPC Server URL" type="text"/>
+<input id="rpcUsername" placeholder="RPC Username" type="text"/>
+<input id="rpcPassword" placeholder="RPC Password" type="password"/>
+</div>
+<div id="results"></div>
+<script>    // Global variables
+    let hashFilePath = '';
+
+    // Utility functions
+    const utilityFunctions = {
+        showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(sectionId).classList.remove('hidden');
+        },
+		
+		displayResults(text) {
+			const resultsElement = document.getElementById('results');
+			resultsElement.textContent += text + '\n';
+		},
+
+		clearResults() {
+			document.getElementById('results').textContent = '';
+		},
+		 
+		isHexString(str) {
+            const hexRegex = /^[0-9A-Fa-f]*$/;
+            return typeof str === 'string' && hexRegex.test(str);
+        },
+
+		hexToBytes(hex) {
+			if (hex === null || hex === undefined || hex === '') {
+				return new Uint8Array(0);
+			}
+			if (typeof hex !== 'string') {
+				console.warn('Invalid hex input:', hex);
+				return new Uint8Array(0);
+			}
+			hex = hex.toLowerCase();
+			if (!/^[0-9a-f]*$/.test(hex) || hex.length % 2 !== 0) {
+				console.warn('Invalid hex string:', hex);
+				return new Uint8Array(0);
+			}
+			return new Uint8Array(hex.match(/.{2}/g).map(byte => parseInt(byte, 16)));
+		},
+
+        bytesToHex(bytes) {
+            return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+        },
+
+        reverseBytes(bufferOrHex) {
+            const bytes = bufferOrHex instanceof Uint8Array ? bufferOrHex : this.hexToBytes(bufferOrHex);
+            return new Uint8Array(bytes.reverse());
+        },
+
+        concatenateArrayBuffers(buffer1, buffer2) {
+            const tmp = new Uint8Array(buffer1.byteLength + buffer2.byteLength);
+            tmp.set(new Uint8Array(buffer1), 0);
+            tmp.set(new Uint8Array(buffer2), buffer1.byteLength);
+            return tmp.buffer;
+        },
+
+        encodeVarInt(number) {
+            if (number < 0xfd) {
+                return new Uint8Array([number]);
+            } else if (number <= 0xffff) {
+                return new Uint8Array([0xfd, number & 0xff, (number >> 8) & 0xff]);
+            } else if (number <= 0xffffffff) {
+                return new Uint8Array([0xfe, number & 0xff, (number >> 8) & 0xff, (number >> 16) & 0xff, (number >> 24) & 0xff]);
+            } else {
+                return new Uint8Array([0xff, number & 0xff, (number >> 8) & 0xff, (number >> 16) & 0xff, (number >> 24) & 0xff,
+                                       (number >> 32) & 0xff, (number >> 40) & 0xff, (number >> 48) & 0xff, (number >> 56) & 0xff]);
+            }
+        },
+
+        encodeBitcoinValue(value) {
+            const satoshis = Math.round(value * 100000000);
+            const buffer = new ArrayBuffer(8);
+            const view = new DataView(buffer);
+            view.setBigUint64(0, BigInt(satoshis), true);
+            return buffer;
+        },
+
+        async sha256(data) {
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return new Uint8Array(hashBuffer);
+        },
+
+        async doubleSha256(data) {
+            return this.sha256(await this.sha256(data));
+        }
+    };
+
+    // Transaction and block processing functions
+    const processingFunctions = {
+		serializeTransaction(tx) {
+			let buffer = new ArrayBuffer(0);
+
+			// Version
+			buffer = utilityFunctions.concatenateArrayBuffers(buffer, new Uint32Array([tx.version]).buffer);
+
+			// Input count
+			buffer = utilityFunctions.concatenateArrayBuffers(buffer, utilityFunctions.encodeVarInt(tx.vin.length));
+
+			// Inputs
+			for (const input of tx.vin) {
+				if (input.coinbase) {
+					// Handle coinbase transaction
+					buffer = utilityFunctions.concatenateArrayBuffers(buffer, new Uint8Array(32)); // 32 bytes of zeros for txid
+					buffer = utilityFunctions.concatenateArrayBuffers(buffer, new Uint32Array([0xffffffff]).buffer); // 0xffffffff for vout
+					const coinbaseBytes = utilityFunctions.hexToBytes(input.coinbase);
+					buffer = utilityFunctions.concatenateArrayBuffers(buffer, utilityFunctions.encodeVarInt(coinbaseBytes.length));
+					buffer = utilityFunctions.concatenateArrayBuffers(buffer, coinbaseBytes);
+				} else {
+					// Regular transaction input
+					buffer = utilityFunctions.concatenateArrayBuffers(buffer, utilityFunctions.reverseBytes(utilityFunctions.hexToBytes(input.txid)));
+					buffer = utilityFunctions.concatenateArrayBuffers(buffer, new Uint32Array([input.vout]).buffer);
+					
+					// Handle scriptSig
+					const scriptSig = input.scriptSig ? (input.scriptSig.hex || '') : '';
+					const scriptSigBytes = utilityFunctions.hexToBytes(scriptSig);
+					buffer = utilityFunctions.concatenateArrayBuffers(buffer, utilityFunctions.encodeVarInt(scriptSigBytes.length));
+					buffer = utilityFunctions.concatenateArrayBuffers(buffer, scriptSigBytes);
+				}
+				buffer = utilityFunctions.concatenateArrayBuffers(buffer, new Uint32Array([input.sequence]).buffer);
+			}
+
+			// Output count
+			buffer = utilityFunctions.concatenateArrayBuffers(buffer, utilityFunctions.encodeVarInt(tx.vout.length));
+
+			// Outputs
+			for (const output of tx.vout) {
+				buffer = utilityFunctions.concatenateArrayBuffers(buffer, utilityFunctions.encodeBitcoinValue(output.value));
+				const scriptPubKeyBytes = utilityFunctions.hexToBytes(output.scriptPubKey.hex);
+				buffer = utilityFunctions.concatenateArrayBuffers(buffer, utilityFunctions.encodeVarInt(scriptPubKeyBytes.length));
+				buffer = utilityFunctions.concatenateArrayBuffers(buffer, scriptPubKeyBytes);
+			}
+
+			// Locktime
+			buffer = utilityFunctions.concatenateArrayBuffers(buffer, new Uint32Array([tx.locktime]).buffer);
+
+			return buffer;
+		},
+
+        async calculateMerkleRoot(txHashes) {
+            if (txHashes.length === 0) return null;
+            if (txHashes.length === 1) return txHashes[0];
+            const newHashes = [];
+            for (let i = 0; i < txHashes.length; i += 2) {
+                const left = utilityFunctions.reverseBytes(utilityFunctions.hexToBytes(txHashes[i]));
+                const right = i + 1 < txHashes.length ? utilityFunctions.reverseBytes(utilityFunctions.hexToBytes(txHashes[i + 1])) : left;
+                const combined = new Uint8Array([...left, ...right]);
+                const newHash = await utilityFunctions.doubleSha256(combined);
+                newHashes.push(utilityFunctions.bytesToHex(utilityFunctions.reverseBytes(new Uint8Array(newHash))));
+            }
+            return this.calculateMerkleRoot(newHashes);
+        },
+
+        async calculateBlockHash(blockData) {
+            const buffer = new ArrayBuffer(80);
+            const view = new DataView(buffer);
+
+            view.setUint32(0, blockData.version, true);
+            const prevBlockHash = utilityFunctions.reverseBytes(utilityFunctions.hexToBytes(blockData.previousblockhash));
+            new Uint8Array(buffer, 4, 32).set(prevBlockHash);
+            const merkleRoot = utilityFunctions.reverseBytes(utilityFunctions.hexToBytes(blockData.merkleroot));
+            new Uint8Array(buffer, 36, 32).set(merkleRoot);
+            view.setUint32(68, blockData.time, true);
+            view.setUint32(72, parseInt(blockData.bits, 16), true);
+            view.setUint32(76, blockData.nonce, true);
+
+            const hash = await utilityFunctions.doubleSha256(buffer);
+            return utilityFunctions.bytesToHex(utilityFunctions.reverseBytes(new Uint8Array(hash)));
+        }
+    };
+
+
+    // Main functionality
+	async function showTransactions() {
+		const file = document.getElementById('blockFile').files[0];
+		const address = document.getElementById('address').value;
+		const showAllAddresses = document.getElementById('showAllAddresses').checked;
+
+		if (!file) {
+			alert('Please select a block file');
+			return;
+		}
+
+		try {
+			const blockData = JSON.parse(await file.text());
+			let output = '';
+
+			for (const tx of blockData.tx) {
+				let involvedAddresses = new Map();
+				let isRelevantTransaction = false;
+
+				// Check inputs
+				if (Array.isArray(tx.vin)) {
+					tx.vin.forEach((vin, index) => {
+						if (vin.prevout && vin.prevout.scriptPubKey) {
+							const inputAddress = vin.prevout.scriptPubKey.address || 'Unknown';
+							involvedAddresses.set(inputAddress, { type: 'input', index });
+							if (inputAddress === address) isRelevantTransaction = true;
+						}
+					});
+				}
+
+				// Check outputs
+				if (Array.isArray(tx.vout)) {
+					tx.vout.forEach((vout, index) => {
+						if (vout.scriptPubKey && vout.scriptPubKey.address) {
+							const outputAddress = vout.scriptPubKey.address;
+							involvedAddresses.set(outputAddress, { type: 'output', index, value: vout.value });
+							if (outputAddress === address) isRelevantTransaction = true;
+						}
+					});
+				}
+
+				if (address && !isRelevantTransaction && !showAllAddresses) continue;
+
+				output += `Transaction ID: ${tx.txid}\n`;
+				output += `Version: ${tx.version}\n`;
+				output += `Size: ${tx.size} bytes\n`;
+				output += `Virtual Size: ${tx.vsize} vbytes\n`;
+				output += `Weight: ${tx.weight}\n`;
+				output += `Locktime: ${tx.locktime}\n`;
+
+				if (showAllAddresses || isRelevantTransaction) {
+					output += `Addresses involved:\n`;
+					involvedAddresses.forEach((info, addr) => {
+						output += `  - ${addr} (${info.type}, index: ${info.index})`;
+						if (info.type === 'output') {
+							output += `, value: ${info.value} BTC`;
+						}
+						if (addr === address) {
+							output += ' (specified address)';
+						}
+						output += '\n';
+					});
+				}
+
+				output += '\n';
+			}
+
+			utilityFunctions.displayResults(output || 'No matching transactions found.');
+		} catch (error) {
+			console.error('Error processing block file:', error);
+			utilityFunctions.displayResults('Error processing block file. Please check the console for details.');
+		}
+}
+
+	async function loadBlockHashes() {
+		utilityFunctions.clearResults();
+        const file = document.getElementById('hashesFile').files[0];
+        if (!file) {
+            alert('Please select a block hashes file');
+            return;
+        }
+        hashFilePath = URL.createObjectURL(file);
+        utilityFunctions.displayResults(`Hash file loaded. Ready for block verification.`);
+    }
+
+    async function findHashForHeight(height) {
+        if (!hashFilePath) {
+            console.warn('No hash file loaded');
+            return null;
+        }
+        try {
+            const response = await fetch(hashFilePath);
+            const reader = response.body.getReader();
+            let partialLine = '';
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = partialLine + new TextDecoder().decode(value);
+                const lines = chunk.split('\n');
+                
+                for (let i = 0; i < lines.length - 1; i++) {
+                    const [lineHeight, hash] = lines[i].split(':');
+                    if (parseInt(lineHeight.trim()) === height) {
+                        reader.cancel();
+                        return hash.trim();
+                    }
+                }
+                
+                partialLine = lines[lines.length - 1];
+            }
+        } catch (error) {
+            console.error('Error reading hash file:', error);
+        }
+        return null; // Hash not found for the given height
+    }
+
+	async function downloadBlock() {
+			utilityFunctions.clearResults();
+
+	  const blockHeight = document.getElementById('blockHeightDownload').value;
+	  if (!blockHeight) {
+		alert('Please enter a block height');
+		return;
+	  }
+
+	  utilityFunctions.displayResults('Fetching block data...');
+	  const fetcher = new BitcoinBlockHashFetcher();
+
+	  try {
+		const blockHash = await fetcher.getBlockHash(parseInt(blockHeight));
+		const blockData = await fetcher.getBlock(blockHash, 2);
+		const jsonString = JSON.stringify(blockData, null, 2);
+		const blob = new Blob([jsonString], { type: 'application/json' });
+
+		// Create a download link and trigger the download
+		const url = URL.createObjectURL(blob);
+		const fileName = `block_${blockHeight}.json`;
+
+		// Use the browser's download API
+		if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+		  // For IE
+		  window.navigator.msSaveOrOpenBlob(blob, fileName);
+		} else {
+		  // For other browsers
+		  const link = document.createElement('a');
+		  link.href = url;
+		  link.download = fileName;
+		  link.style.display = 'none';
+		  document.body.appendChild(link);
+		  link.click();
+		  document.body.removeChild(link);
+		}
+
+		URL.revokeObjectURL(url);
+		utilityFunctions.displayResults(`Block ${blockHeight} downloaded successfully.`);
+	  } catch (error) {
+		console.error('Error downloading block:', error);
+		utilityFunctions.displayResults(`Error downloading block: ${error.message}`);
+	  }
+	}
+
+	async function checkBlock() {
+		utilityFunctions.clearResults();
+		const file = document.getElementById('checkBlockFile').files[0];
+		if (!file) {
+			alert('Please select a block file');
+			return;
+		}
+		try {
+			const blockData = JSON.parse(await file.text());
+			let output = 'Block verification started...\n\n';
+
+			// Verify transaction hashes
+			utilityFunctions.displayResults("Verifying transaction hashes:\n");
+			for (const tx of blockData.tx) {
+				try {
+					const serializedTx = processingFunctions.serializeTransaction(tx);
+					const calculatedTxHash = utilityFunctions.bytesToHex(utilityFunctions.reverseBytes(new Uint8Array(await utilityFunctions.doubleSha256(serializedTx))));
+					if (calculatedTxHash !== tx.txid) {
+						output += `FAILED: Transaction hash mismatch for ${tx.txid}\n`;
+						output += `Calculated: ${calculatedTxHash}\n`;
+						output += `Expected: ${tx.txid}\n`;
+						output += `Transaction details: ${JSON.stringify(tx, null, 2)}\n`;
+						utilityFunctions.displayResults(output);
+						return;
+					}
+				} catch (error) {
+					output += `ERROR: Failed to verify transaction ${tx.txid}: ${error.message}\n`;
+					output += `Transaction details: ${JSON.stringify(tx, null, 2)}\n`;
+					console.error('Transaction verification error:', error);
+					utilityFunctions.displayResults(output);
+					return;
+				}
+			}
+			utilityFunctions.displayResults("PASSED: All transaction hashes verified successfully.");
+
+			// Verify Merkle root
+			utilityFunctions.displayResults("Verifying Merkle root:");
+			const txHashes = blockData.tx.map(tx => tx.txid);
+			const calculatedMerkleRoot = await processingFunctions.calculateMerkleRoot(txHashes);
+			if (calculatedMerkleRoot !== blockData.merkleroot) {
+				output += "FAILED: Merkle root mismatch\n";
+				output += `Calculated: ${calculatedMerkleRoot}`;
+				output += `Expected: ${blockData.merkleroot}`;
+				utilityFunctions.displayResults(output);
+				return;
+			}
+			utilityFunctions.displayResults("PASSED: Merkle root verified successfully.\n\n");
+
+			// Verify block hash
+			utilityFunctions.displayResults("Verifying block hash:\n");
+			const calculatedBlockHash = await processingFunctions.calculateBlockHash(blockData);
+			if (calculatedBlockHash !== blockData.hash) {
+				output += "FAILED: Block hash mismatch\n";
+				output += `Calculated: ${calculatedBlockHash}\n`;
+				output += `Expected: ${blockData.hash}\n`;
+				utilityFunctions.displayResults(output);
+				return;
+			}
+			utilityFunctions.displayResults("PASSED: Block hash verified successfully.\n\n");
+
+			// Check against loaded block hashes
+			if (hashFilePath) {
+				utilityFunctions.displayResults("Verifying against stored block hashes:\n");
+				const storedHash = await findHashForHeight(blockData.height);
+				if (storedHash) {
+					if (storedHash !== blockData.hash) {
+						output += "FAILED: Block hash mismatch with stored hash\n";
+						output += `Block hash: ${blockData.hash}\n`;
+						output += `Stored hash: ${storedHash}\n`;
+						utilityFunctions.displayResults(output);
+						return;
+					}
+					utilityFunctions.displayResults("PASSED: Block hash verified against stored hashes.\n");
+				} else {
+					utilityFunctions.displayResults(`WARNING: Block height ${blockData.height} not found in loaded hashes.\n`);
+					return;
+				}
+			} else {
+				utilityFunctions.displayResults("WARNING: No hash file loaded for verification.\n");
+			}
+
+			utilityFunctions.displayResults('\nAll verifications passed successfully.');
+		} catch (error) {
+			console.error('Error during block verification:', error);
+			utilityFunctions.displayResults(`Error during block verification: ${error.message}`);
+		}
+	}
+	async function updateBlockHashFile() {
+		utilityFunctions.clearResults();
+		const fileInput = document.getElementById('hashesFileUpd');
+		if (!fileInput.files.length) {
+			alert('Please select a file to update.');
+			return;
+		}
+
+		const file = fileInput.files[0];
+		const reader = new FileReader();
+
+		reader.onload = async function(e) {
+			const content = e.target.result;
+			const lines = content.trim().split('\n');
+			const lastBlockHeight = parseInt(lines[lines.length - 1].split(',')[0]);
+			utilityFunctions.displayResults(`Starting at block ${lastBlockHeight}\n`);
+
+			const fetcher = new BitcoinBlockHashFetcher();
+			try {
+				const latestBlockHeight = await fetcher.getLatestBlockHeight();
+				let newContent = content;
+				utilityFunctions.displayResults(`Ending at block ${latestBlockHeight}\n`);
+
+				for (let height = lastBlockHeight + 1; height <= latestBlockHeight; height++) {
+					const hash = await fetcher.getBlockHash(height);
+					newContent += `\n${height}:  ${hash}`;
+					// Update progress (optional)
+					// document.getElementById('progress').textContent = `Fetching block ${height} of ${latestBlockHeight}`;
+				}
+
+				// Create and trigger download
+				const blob = new Blob([newContent], { type: 'text/plain' });
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.style.display = 'none';
+				a.href = url;
+				a.download = 'updated_block_hashes.txt';
+				document.body.appendChild(a);
+				a.click();
+				URL.revokeObjectURL(url);
+				document.body.removeChild(a);
+
+				utilityFunctions.displayResults('Block hash file updated successfully!');
+			} catch (error) {
+				console.error('Error updating block hash file:', error);
+				utilityFunctions.displayResults('An error occurred while updating the block hash file. Please check the console for details.');
+			} finally {
+//				document.getElementById('progress').textContent = '';
+			}
+		};
+
+		reader.readAsText(file);
+}
+    // Expose necessary functions to the global scope
+    window.showSection = utilityFunctions.showSection;
+    window.showTransactions = showTransactions;
+    window.loadBlockHashes = loadBlockHashes;
+    window.checkBlock = checkBlock;
+    window.updateBlockHashFile = updateBlockHashFile;
+	window.downloadBlock = downloadBlock;
+</script>
+<script>class BitcoinBlockHashFetcher {
+  constructor(url = 'https://rpc.ankr.com/btc', username = '', password = '') {
+    this.url = url;
+    this.username = username;
+    this.password = password;
+  }
+
+  async getBlockHash(blockHeight) {
+    return this.rpcCall('getblockhash', [blockHeight]);
+  }
+
+  async getLatestBlockHeight() {
+    return this.rpcCall('getblockcount', []);
+  }
+
+  async getBlock(blockHash, verbosity = 1) {
+    return this.rpcCall('getblock', [blockHash, verbosity]);
+  }
+
+  async rpcCall(method, params) {
+    const payload = {
+      jsonrpc: '2.0',
+      id: method,
+      method: method,
+      params: params
+    };
+
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+
+    if (this.username && this.password) {
+      headers['Authorization'] = 'Basic ' + Buffer.from(this.username + ':' + this.password).toString('base64');
+    }
+
+    try {
+      const response = await fetch(this.url, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(`RPC error: ${data.error.message}`);
+      }
+
+      return data.result;
+    } catch (error) {
+      console.error(`Error in RPC call to ${method}:`, error);
+      throw error;
+    }
+  }
+}</script>
+</body>
+</html>
