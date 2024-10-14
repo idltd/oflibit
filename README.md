@@ -1,5 +1,7 @@
 Offline Bitcoin Transaction Verifier
 
+This a PWA (progressive web app) - once 'added to desktop/installed' no internet access is needed unless specifically required to download new data.
+
 This app works in tandem with Coinkite Opendime and Sats Card to enable secure, private Bitcoin transactions without an internet connection.
 
 Key Features:
