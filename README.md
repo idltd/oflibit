@@ -1,3 +1,7 @@
+(90% there - confident in the functionality, but sometimes wants to access rhe server even after installation).
+
+Use at your own risk - you have the source code!).
+
 Offline Bitcoin Transaction Verifier
 
 This a PWA (progressive web app) - once 'added to desktop/installed' no internet access is needed unless specifically required to download new data.
