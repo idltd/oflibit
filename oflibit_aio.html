@@ -401,22 +401,13 @@
 				// Create a download link and trigger the download
 				const url = URL.createObjectURL(blob);
 				const fileName = `block_${blockHeight}.json`;
-
-				// Use the browser's download API
-				if (window.navigator && window.navigator.msSaveOrOpenBlob) {
-					// For IE
-					window.navigator.msSaveOrOpenBlob(blob, fileName);
-				} else {
-					// For other browsers
-					const link = document.createElement('a');
-					link.href = url;
-					link.download = fileName;
-					link.style.display = 'none';
-					document.body.appendChild(link);
-					link.click();
-					document.body.removeChild(link);
-				}
-
+				const link = document.createElement('a');
+				link.href = url;
+				link.download = fileName;
+				link.style.display = 'none';
+				document.body.appendChild(link);
+				link.click();
+				document.body.removeChild(link);
 				URL.revokeObjectURL(url);
 				utilityFunctions.displayResults(`Block ${blockHeight} downloaded successfully.`);
 			} catch (error) {
