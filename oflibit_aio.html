@@ -86,9 +86,9 @@
 		<h2>Bitcoin RPC Settings</h2>
 		<label for="rpcPreset">Select RPC Endpoint:</label>
 		<select id="rpcPreset" onchange="updateRpcFields()">
-			<option value="ankr">Ankr (Public)</option>
-			<option value="blockstream">Blockstream (Public)</option>
-			<option value="getblock">GetBlock.io (Public)</option>
+			<option value="publicnode">PublicNode / Allnodes (Public)</option>
+			<option value="nownodes">NOWNodes (Public)</option>
+			<option value="blockeden">BlockEden.xyz (Public)</option>
 			<option value="custom">Custom / Private</option>
 		</select>
 		<div id="customRpcFields" style="display: none; margin-top: 10px;">
@@ -105,17 +105,17 @@
 
 		// RPC endpoint presets
 		const rpcPresets = {
-			ankr: {
-				url: 'https://rpc.ankr.com/btc',
-				description: 'Ankr public Bitcoin RPC - Free, no authentication required'
+			publicnode: {
+				url: 'https://bitcoin-rpc.publicnode.com',
+				description: 'PublicNode (Allnodes) - Free public Bitcoin RPC, no API key required'
 			},
-			blockstream: {
-				url: 'https://blockstream.info/api',
-				description: 'Blockstream public API - Free, no authentication required (REST API)'
+			nownodes: {
+				url: 'https://btc.nownodes.io',
+				description: 'NOWNodes - Free public Bitcoin RPC endpoint'
 			},
-			getblock: {
-				url: 'https://btc.getblock.io/mainnet/',
-				description: 'GetBlock.io - Free tier available, may require API key for heavy use'
+			blockeden: {
+				url: 'https://api.blockeden.xyz/btc/8UuXzatAZYDBJC6YZTKD',
+				description: 'BlockEden.xyz - Free public Bitcoin RPC with shared API key'
 			},
 			custom: {
 				url: '',
@@ -128,7 +128,7 @@
 			const preset = document.getElementById('rpcPreset').value;
 			if (preset === 'custom') {
 				return {
-					url: document.getElementById('rpcServer').value || rpcPresets.ankr.url,
+					url: document.getElementById('rpcServer').value || rpcPresets.publicnode.url,
 					username: document.getElementById('rpcUsername').value,
 					password: document.getElementById('rpcPassword').value
 				};
