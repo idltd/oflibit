@@ -49,6 +49,7 @@
 	<button onclick="utilityFunctions.clearResults();showSection('showTx')">Show Transactions</button>
 	<button onclick="utilityFunctions.clearResults();showSection('updateHashes')">Update Block Hash File</button>
 	<button onclick="utilityFunctions.clearResults();showSection('downloadBlockSection')">Download Block</button>
+	<button onclick="utilityFunctions.clearResults();showSection('rpcSettings')">RPC Settings</button>
 
 	<div id="progressContainer" style="display: none; width: 100%; background-color: #f0f0f0; margin-top: 10px;">
 		<div id="progressBar" style="width: 0%; height: 20px; background-color: #4CAF50;"></div>
@@ -81,16 +82,78 @@
 		<input accept=".txt" id="hashesFileUpd" type="file" />
 		<button onclick="utilityFunctions.clearResults();updateBlockHashFile()">Update Block Hash File</button>
 	</div>
-	<div class="section hidden">
-		<h2>Bitcoin Core RPC Settings</h2>
-		<input id="rpcServer" placeholder="RPC Server URL" type="text" />
-		<input id="rpcUsername" placeholder="RPC Username" type="text" />
-		<input id="rpcPassword" placeholder="RPC Password" type="password" />
+	<div class="section hidden" id="rpcSettings">
+		<h2>Bitcoin RPC Settings</h2>
+		<label for="rpcPreset">Select RPC Endpoint:</label>
+		<select id="rpcPreset" onchange="updateRpcFields()">
+			<option value="ankr">Ankr (Public)</option>
+			<option value="blockstream">Blockstream (Public)</option>
+			<option value="getblock">GetBlock.io (Public)</option>
+			<option value="custom">Custom / Private</option>
+		</select>
+		<div id="customRpcFields" style="display: none; margin-top: 10px;">
+			<input id="rpcServer" placeholder="RPC Server URL" type="text" style="width: 100%; margin-bottom: 5px;" />
+			<input id="rpcUsername" placeholder="RPC Username (optional)" type="text" style="width: 100%; margin-bottom: 5px;" />
+			<input id="rpcPassword" placeholder="RPC Password (optional)" type="password" style="width: 100%;" />
+		</div>
+		<p id="rpcInfo" style="margin-top: 10px; font-size: 0.9em; color: #666;"></p>
 	</div>
 	<div id="results"></div>
 	<script>
 		// Global variables
 		let hashFilePath = '';
+
+		// RPC endpoint presets
+		const rpcPresets = {
+			ankr: {
+				url: 'https://rpc.ankr.com/btc',
+				description: 'Ankr public Bitcoin RPC - Free, no authentication required'
+			},
+			blockstream: {
+				url: 'https://blockstream.info/api',
+				description: 'Blockstream public API - Free, no authentication required (REST API)'
+			},
+			getblock: {
+				url: 'https://btc.getblock.io/mainnet/',
+				description: 'GetBlock.io - Free tier available, may require API key for heavy use'
+			},
+			custom: {
+				url: '',
+				description: 'Enter your own Bitcoin Core RPC or compatible endpoint'
+			}
+		};
+
+		// Get current RPC configuration
+		function getRpcConfig() {
+			const preset = document.getElementById('rpcPreset').value;
+			if (preset === 'custom') {
+				return {
+					url: document.getElementById('rpcServer').value || rpcPresets.ankr.url,
+					username: document.getElementById('rpcUsername').value,
+					password: document.getElementById('rpcPassword').value
+				};
+			}
+			return {
+				url: rpcPresets[preset].url,
+				username: '',
+				password: ''
+			};
+		}
+
+		// Update RPC fields visibility based on preset selection
+		function updateRpcFields() {
+			const preset = document.getElementById('rpcPreset').value;
+			const customFields = document.getElementById('customRpcFields');
+			const infoElement = document.getElementById('rpcInfo');
+
+			customFields.style.display = preset === 'custom' ? 'block' : 'none';
+			infoElement.textContent = rpcPresets[preset].description;
+		}
+
+		// Initialize RPC info on page load
+		document.addEventListener('DOMContentLoaded', () => {
+			updateRpcFields();
+		});
 
 		// Utility functions
 		const utilityFunctions = {
@@ -390,7 +453,8 @@
 			}
 
 			utilityFunctions.displayResults('Fetching block data...');
-			const fetcher = new BitcoinBlockHashFetcher();
+			const rpcConfig = getRpcConfig();
+			const fetcher = new BitcoinBlockHashFetcher(rpcConfig.url, rpcConfig.username, rpcConfig.password);
 
 			try {
 				const blockHash = await fetcher.getBlockHash(parseInt(blockHeight));
@@ -524,7 +588,8 @@
 
 				utilityFunctions.displayResults(`Starting at block ${lastBlockHeight}\n`);
 
-				const fetcher = new BitcoinBlockHashFetcher();
+				const rpcConfig = getRpcConfig();
+				const fetcher = new BitcoinBlockHashFetcher(rpcConfig.url, rpcConfig.username, rpcConfig.password);
 				try {
 					const latestBlockHeight = await fetcher.getLatestBlockHeight();
 					let newContent = content.trim();  // Remove any trailing newlines
