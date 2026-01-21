@@ -340,6 +340,10 @@
 				alert('Please select a block hashes file');
 				return;
 			}
+			// Revoke previous object URL to prevent memory leak
+			if (hashFilePath) {
+				URL.revokeObjectURL(hashFilePath);
+			}
 			hashFilePath = URL.createObjectURL(file);
 			utilityFunctions.displayResults(`Hash file loaded. Ready for block verification.`);
 		}
