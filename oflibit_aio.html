@@ -9,51 +9,256 @@
 	<link rel="icon" type="image/x-icon" href="favicon.ico">
 	<link rel="manifest" href="manifest.json">
 	<style>
+		:root {
+			--bg: #f5f6fa;
+			--surface: #ffffff;
+			--text: #1a1a2e;
+			--text-muted: #666;
+			--border: #e0e0e0;
+			--primary: #3b82f6;
+			--primary-hover: #2563eb;
+			--danger: #ef4444;
+			--danger-hover: #dc2626;
+			--success: #22c55e;
+			--shadow: 0 2px 8px rgba(0,0,0,0.08);
+			--radius: 8px;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
 		body {
-			font-family: Arial, sans-serif;
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 			max-width: 800px;
 			margin: 0 auto;
 			padding: 20px;
+			background: var(--bg);
+			color: var(--text);
+			line-height: 1.5;
 		}
 
 		h1 {
 			text-align: center;
+			font-size: 1.4em;
+			margin-bottom: 20px;
 		}
 
-		button {
-			margin: 10px;
-			padding: 10px;
+		h2 {
+			margin-top: 0;
+			font-size: 1.1em;
+		}
+
+		.nav-buttons {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			justify-content: center;
+			margin-bottom: 16px;
+		}
+
+		.nav-buttons button {
+			padding: 8px 14px;
+			border: none;
+			border-radius: var(--radius);
+			background: var(--primary);
+			color: #fff;
+			font-size: 0.85em;
+			font-weight: 500;
+			cursor: pointer;
+			transition: background 0.15s;
+		}
+
+		.nav-buttons button:hover {
+			background: var(--primary-hover);
 		}
 
 		.section {
-			margin-top: 20px;
-			border: 1px solid #ccc;
+			margin-top: 16px;
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: var(--radius);
 			padding: 20px;
+			box-shadow: var(--shadow);
+		}
+
+		.section input[type="file"],
+		.section input[type="text"],
+		.section input[type="number"],
+		.section input[type="password"],
+		.section select {
+			width: 100%;
+			padding: 8px 10px;
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			font-size: 0.9em;
+			margin-bottom: 8px;
+		}
+
+		.section button {
+			padding: 8px 14px;
+			border: none;
+			border-radius: 4px;
+			background: var(--primary);
+			color: #fff;
+			font-size: 0.85em;
+			cursor: pointer;
+			margin-top: 4px;
+		}
+
+		.section button:hover {
+			background: var(--primary-hover);
 		}
 
 		.hidden {
 			display: none;
 		}
 
+		#progressContainer {
+			display: none;
+			width: 100%;
+			background: var(--border);
+			border-radius: 10px;
+			margin-top: 12px;
+			overflow: hidden;
+		}
+
+		#progressBar {
+			width: 0%;
+			height: 22px;
+			background: var(--success);
+			border-radius: 10px;
+			text-align: center;
+			font-size: 0.75em;
+			line-height: 22px;
+			color: #fff;
+			font-weight: 600;
+			transition: width 0.2s;
+		}
+
 		#results {
 			white-space: pre-wrap;
-			font-family: monospace;
+			font-family: 'SF Mono', 'Fira Code', monospace;
+			font-size: 0.85em;
+			background: var(--surface);
+			border: 1px solid var(--border);
+			border-radius: var(--radius);
+			padding: 16px;
+			margin-top: 16px;
+			box-shadow: var(--shadow);
+		}
+
+		#results:empty {
+			display: none;
+		}
+
+		/* File Manager styles */
+		.fm-controls {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+			flex-wrap: wrap;
+			margin-bottom: 16px;
+		}
+
+		.fm-controls select,
+		.fm-controls input[type="file"] {
+			margin-bottom: 0;
+		}
+
+		.fm-category {
+			margin-bottom: 14px;
+		}
+
+		.fm-category h3 {
+			font-size: 0.9em;
+			margin: 0 0 6px;
+			color: var(--text-muted);
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+		}
+
+		.fm-list {
+			list-style: none;
+			padding: 0;
+			margin: 0;
+		}
+
+		.fm-list li {
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			padding: 6px 8px;
+			border: 1px solid var(--border);
+			border-radius: 4px;
+			margin-bottom: 4px;
+			font-size: 0.85em;
+		}
+
+		.fm-list li .fm-name {
+			flex: 1;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.fm-list li button {
+			padding: 3px 8px;
+			font-size: 0.78em;
+			margin: 0;
+		}
+
+		.fm-list li button.fm-delete {
+			background: var(--danger);
+		}
+
+		.fm-list li button.fm-delete:hover {
+			background: var(--danger-hover);
+		}
+
+		.fm-empty {
+			color: var(--text-muted);
+			font-size: 0.82em;
+			font-style: italic;
+		}
+
+		@media (max-width: 480px) {
+			body {
+				padding: 12px;
+			}
+			h1 {
+				font-size: 1.15em;
+			}
+			.nav-buttons button {
+				font-size: 0.78em;
+				padding: 7px 10px;
+			}
+			.section {
+				padding: 14px;
+			}
+			.fm-list li {
+				flex-wrap: wrap;
+			}
 		}
 	</style>
 </head>
 
 <body>
-	<h1>Offline Bitcoin Block Verification App</h1>
-	<button onclick="utilityFunctions.clearResults();showSection('loadHashes')">Load Block Hashes</button>
-	<button onclick="utilityFunctions.clearResults();showSection('checkBlock')">Check Block</button>
-	<button onclick="utilityFunctions.clearResults();showSection('showTx')">Show Transactions</button>
-	<button onclick="utilityFunctions.clearResults();showSection('updateHashes')">Update Block Hash File</button>
-	<button onclick="utilityFunctions.clearResults();showSection('downloadBlockSection')">Download Block</button>
-	<button onclick="utilityFunctions.clearResults();showSection('rpcSettings')">RPC Settings</button>
-
-	<div id="progressContainer" style="display: none; width: 100%; background-color: #f0f0f0; margin-top: 10px;">
-		<div id="progressBar" style="width: 0%; height: 20px; background-color: #4CAF50;"></div>
+	<h1>Offline Bitcoin Block Verification</h1>
+	<div class="nav-buttons">
+		<button onclick="utilityFunctions.clearResults();showSection('loadHashes')">Load Hashes</button>
+		<button onclick="utilityFunctions.clearResults();showSection('checkBlock')">Check Block</button>
+		<button onclick="utilityFunctions.clearResults();showSection('showTx')">Show Tx</button>
+		<button onclick="utilityFunctions.clearResults();showSection('updateHashes')">Update Hashes</button>
+		<button onclick="utilityFunctions.clearResults();showSection('downloadBlockSection')">Download Block</button>
+		<button onclick="utilityFunctions.clearResults();showSection('rpcSettings')">RPC Settings</button>
+		<button id="btnFileManager" onclick="utilityFunctions.clearResults();showSection('fileManager')">File Manager</button>
 	</div>
+
+	<div id="progressContainer">
+		<div id="progressBar"></div>
+	</div>
+
 	<div class="section hidden" id="downloadBlockSection">
 		<h2>Download Block</h2>
 		<input id="blockHeightDownload" placeholder="Enter block height" type="number" />
@@ -91,17 +296,181 @@
 			<option value="blockeden">BlockEden.xyz (Public)</option>
 			<option value="custom">Custom / Private</option>
 		</select>
-		<div id="customRpcFields" style="display: none; margin-top: 10px;">
-			<input id="rpcServer" placeholder="RPC Server URL" type="text" style="width: 100%; margin-bottom: 5px;" />
-			<input id="rpcUsername" placeholder="RPC Username (optional)" type="text" style="width: 100%; margin-bottom: 5px;" />
-			<input id="rpcPassword" placeholder="RPC Password (optional)" type="password" style="width: 100%;" />
+		<div id="customRpcFields" class="hidden" style="margin-top: 10px;">
+			<input id="rpcServer" placeholder="RPC Server URL" type="text" />
+			<input id="rpcUsername" placeholder="RPC Username (optional)" type="text" />
+			<input id="rpcPassword" placeholder="RPC Password (optional)" type="password" />
 		</div>
-		<p id="rpcInfo" style="margin-top: 10px; font-size: 0.9em; color: #666;"></p>
+		<p id="rpcInfo" style="margin-top: 10px; font-size: 0.9em; color: var(--text-muted);"></p>
+	</div>
+	<div class="section hidden" id="fileManager">
+		<h2>File Manager (OPFS)</h2>
+		<div class="fm-controls">
+			<select id="fmDirSelect">
+				<option value="hashes">Hashes</option>
+				<option value="blocks">Blocks</option>
+				<option value="verify">Verify</option>
+			</select>
+			<input type="file" id="fmFileInput" multiple />
+			<button onclick="fmImportFiles()">Import</button>
+		</div>
+		<div class="fm-category">
+			<h3>Hashes</h3>
+			<ul class="fm-list" id="fmListHashes"></ul>
+		</div>
+		<div class="fm-category">
+			<h3>Blocks</h3>
+			<ul class="fm-list" id="fmListBlocks"></ul>
+		</div>
+		<div class="fm-category">
+			<h3>Verify</h3>
+			<ul class="fm-list" id="fmListVerify"></ul>
+		</div>
 	</div>
 	<div id="results"></div>
 	<script>
 		// Global variables
 		let hashFilePath = '';
+
+		// OPFS support check
+		const OPFS_SUPPORTED = ('storage' in navigator && 'getDirectory' in navigator.storage);
+
+		// OPFS helper object
+		const opfs = {
+			async getRoot() {
+				return await navigator.storage.getDirectory();
+			},
+
+			async ensureDirectories() {
+				if (!OPFS_SUPPORTED) return;
+				const root = await this.getRoot();
+				await root.getDirectoryHandle('hashes', { create: true });
+				await root.getDirectoryHandle('blocks', { create: true });
+				await root.getDirectoryHandle('verify', { create: true });
+			},
+
+			async listFiles(dir) {
+				if (!OPFS_SUPPORTED) return [];
+				const root = await this.getRoot();
+				const dirHandle = await root.getDirectoryHandle(dir, { create: true });
+				const files = [];
+				for await (const [name, handle] of dirHandle) {
+					if (handle.kind === 'file') {
+						files.push(name);
+					}
+				}
+				return files.sort();
+			},
+
+			async readFile(dir, name) {
+				const root = await this.getRoot();
+				const dirHandle = await root.getDirectoryHandle(dir);
+				const fileHandle = await dirHandle.getFileHandle(name);
+				return await fileHandle.getFile();
+			},
+
+			async writeFile(dir, name, content) {
+				const root = await this.getRoot();
+				const dirHandle = await root.getDirectoryHandle(dir, { create: true });
+				const fileHandle = await dirHandle.getFileHandle(name, { create: true });
+				const writable = await fileHandle.createWritable();
+				await writable.write(content);
+				await writable.close();
+			},
+
+			async deleteFile(dir, name) {
+				const root = await this.getRoot();
+				const dirHandle = await root.getDirectoryHandle(dir);
+				await dirHandle.removeEntry(name);
+			},
+
+			async importFile(dir, file) {
+				const content = await file.arrayBuffer();
+				await this.writeFile(dir, file.name, content);
+			},
+
+			async exportFile(dir, name) {
+				const file = await this.readFile(dir, name);
+				const url = URL.createObjectURL(file);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = name;
+				a.style.display = 'none';
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				URL.revokeObjectURL(url);
+			}
+		};
+
+		// File Manager UI functions
+		async function fmRefreshList() {
+			if (!OPFS_SUPPORTED) return;
+			const dirs = ['hashes', 'blocks', 'verify'];
+			for (const dir of dirs) {
+				const listEl = document.getElementById('fmList' + dir.charAt(0).toUpperCase() + dir.slice(1));
+				const files = await opfs.listFiles(dir);
+				if (files.length === 0) {
+					listEl.innerHTML = '<li class="fm-empty">No files</li>';
+				} else {
+					listEl.innerHTML = files.map(name => {
+						let actionBtns = '';
+						if (dir === 'hashes') {
+							actionBtns = `<button onclick="fmUseFile('${dir}','${name}')">Use</button>`;
+						} else {
+							actionBtns = `<button onclick="fmUseFile('${dir}','${name}')">Check</button>`;
+							actionBtns += `<button onclick="fmShowTx('${dir}','${name}')">Tx</button>`;
+						}
+						return `<li>
+							<span class="fm-name">${name}</span>
+							${actionBtns}
+							<button onclick="fmExportFile('${dir}','${name}')">Export</button>
+							<button class="fm-delete" onclick="fmDeleteFile('${dir}','${name}')">Del</button>
+						</li>`;
+					}).join('');
+				}
+			}
+		}
+
+		async function fmImportFiles() {
+			const dir = document.getElementById('fmDirSelect').value;
+			const input = document.getElementById('fmFileInput');
+			if (!input.files.length) {
+				alert('Please select files to import.');
+				return;
+			}
+			const count = input.files.length;
+			for (const file of input.files) {
+				await opfs.importFile(dir, file);
+			}
+			input.value = '';
+			await fmRefreshList();
+			utilityFunctions.displayResults(`Imported ${count} file(s) to ${dir}/`);
+		}
+
+		async function fmExportFile(dir, name) {
+			await opfs.exportFile(dir, name);
+		}
+
+		async function fmDeleteFile(dir, name) {
+			if (!confirm(`Delete "${name}" from ${dir}/?`)) return;
+			await opfs.deleteFile(dir, name);
+			await fmRefreshList();
+		}
+
+		async function fmUseFile(dir, name) {
+			const file = await opfs.readFile(dir, name);
+			if (dir === 'hashes') {
+				loadBlockHashes(file);
+			} else {
+				checkBlock(file);
+			}
+		}
+
+		async function fmShowTx(dir, name) {
+			const file = await opfs.readFile(dir, name);
+			showTransactions(file);
+		}
 
 		// RPC endpoint presets
 		const rpcPresets = {
@@ -150,16 +519,14 @@
 			infoElement.textContent = rpcPresets[preset].description;
 		}
 
-		// Initialize RPC info on page load
-		document.addEventListener('DOMContentLoaded', () => {
-			updateRpcFields();
-		});
-
 		// Utility functions
 		const utilityFunctions = {
 			showSection(sectionId) {
 				document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
 				document.getElementById(sectionId).classList.remove('hidden');
+				if (sectionId === 'fileManager') {
+					fmRefreshList();
+				}
 			},
 
 			displayResults(text) {
@@ -324,8 +691,8 @@
 
 
 		// Main functionality
-		async function showTransactions() {
-			const file = document.getElementById('blockFile').files[0];
+		async function showTransactions(fileArg) {
+			const file = fileArg || document.getElementById('blockFile').files[0];
 			const address = document.getElementById('address').value;
 			const showAllAddresses = document.getElementById('showAllAddresses').checked;
 
@@ -397,8 +764,8 @@
 			}
 		}
 
-		async function loadBlockHashes() {
-			const file = document.getElementById('hashesFile').files[0];
+		async function loadBlockHashes(fileArg) {
+			const file = fileArg || document.getElementById('hashesFile').files[0];
 			if (!file) {
 				alert('Please select a block hashes file');
 				return;
@@ -408,7 +775,7 @@
 				URL.revokeObjectURL(hashFilePath);
 			}
 			hashFilePath = URL.createObjectURL(file);
-			utilityFunctions.displayResults(`Hash file loaded. Ready for block verification.`);
+			utilityFunctions.displayResults(`Hash file loaded: ${file.name || 'file'}. Ready for block verification.`);
 		}
 
 		async function findHashForHeight(height) {
@@ -473,6 +840,12 @@
 				link.click();
 				document.body.removeChild(link);
 				URL.revokeObjectURL(url);
+
+				// Auto-save to OPFS
+				if (OPFS_SUPPORTED) {
+					await opfs.writeFile('blocks', fileName, jsonString);
+				}
+
 				utilityFunctions.displayResults(`Block ${blockHeight} downloaded successfully.`);
 			} catch (error) {
 				console.error('Error downloading block:', error);
@@ -480,8 +853,8 @@
 			}
 		}
 
-		async function checkBlock() {
-			const file = document.getElementById('checkBlockFile').files[0];
+		async function checkBlock(fileArg) {
+			const file = fileArg || document.getElementById('checkBlockFile').files[0];
 			if (!file) {
 				alert('Please select a block file');
 				return;
@@ -596,7 +969,7 @@
 					utilityFunctions.displayResults(`Ending at block ${latestBlockHeight}\n`);
 
 					const progressBar = document.getElementById('progressBar');
-					const progressContainer = progressBar.parentElement;
+					const progressContainer = document.getElementById('progressContainer');
 					progressContainer.style.display = 'block';
 
 					for (let height = lastBlockHeight + 1; height <= latestBlockHeight; height++) {
@@ -622,6 +995,11 @@
 					URL.revokeObjectURL(url);
 					document.body.removeChild(a);
 
+					// Auto-save to OPFS
+					if (OPFS_SUPPORTED) {
+						await opfs.writeFile('hashes', 'updated_block_hashes.txt', newContent);
+					}
+
 					utilityFunctions.displayResults('Block hash file updated successfully!');
 				} catch (error) {
 					console.error('Error updating block hash file:', error);
@@ -633,6 +1011,17 @@
 
 			reader.readAsText(file);
 		}
+
+		// Initialize
+		document.addEventListener('DOMContentLoaded', () => {
+			updateRpcFields();
+			if (!OPFS_SUPPORTED) {
+				document.getElementById('btnFileManager').style.display = 'none';
+			} else {
+				opfs.ensureDirectories();
+			}
+		});
+
 		// Expose necessary functions to the global scope
 		window.showSection = utilityFunctions.showSection;
 		window.showTransactions = showTransactions;
@@ -640,6 +1029,12 @@
 		window.checkBlock = checkBlock;
 		window.updateBlockHashFile = updateBlockHashFile;
 		window.downloadBlock = downloadBlock;
+		window.fmRefreshList = fmRefreshList;
+		window.fmImportFiles = fmImportFiles;
+		window.fmExportFile = fmExportFile;
+		window.fmDeleteFile = fmDeleteFile;
+		window.fmUseFile = fmUseFile;
+		window.fmShowTx = fmShowTx;
 	</script>
 	<script>class BitcoinBlockHashFetcher {
 			constructor(url = 'https://rpc.ankr.com/btc', username = '', password = '') {
