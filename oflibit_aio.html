@@ -266,7 +266,7 @@
 	</div>
 	<div class="section hidden" id="showTx">
 		<h2>Show Transactions</h2>
-		<input accept=".json" id="blockFile" type="file" />
+		<select id="opfsBlockFile"><option value="">-- Select a block file --</option></select>
 		<input id="showAllAddresses" type="checkbox" />
 		<label for="showAllAddresses">Show all addresses involved in transactions</label>
 		<input id="address" placeholder="Optional: Filter by address" type="text" />
@@ -274,17 +274,17 @@
 	</div>
 	<div class="section hidden" id="checkBlock">
 		<h2>Check Block</h2>
-		<input accept=".json" id="checkBlockFile" type="file" />
+		<select id="opfsCheckBlockFile"><option value="">-- Select a block file --</option></select>
 		<button onclick="utilityFunctions.clearResults();checkBlock()">Check Block</button>
 	</div>
 	<div class="section hidden" id="loadHashes">
 		<h2>Load Block Hashes</h2>
-		<input accept=".txt" id="hashesFile" type="file" />
+		<select id="opfsHashesFile"><option value="">-- Select a hash file --</option></select>
 		<button onclick="utilityFunctions.clearResults();loadBlockHashes()">Load Hashes</button>
 	</div>
 	<div class="section hidden" id="updateHashes">
 		<h2>Update Block Hash File</h2>
-		<input accept=".txt" id="hashesFileUpd" type="file" />
+		<select id="opfsHashesFileUpd"><option value="">-- Select a hash file --</option></select>
 		<button onclick="utilityFunctions.clearResults();updateBlockHashFile()">Update Block Hash File</button>
 	</div>
 	<div class="section hidden" id="rpcSettings">
@@ -472,6 +472,38 @@
 			showTransactions(file);
 		}
 
+		// Populate OPFS select dropdowns for a given section
+		async function populateOpfsSelects(sectionId) {
+			if (!OPFS_SUPPORTED) return;
+			const mapping = {
+				showTx: { selectId: 'opfsBlockFile', dirs: ['blocks', 'verify'], label: 'block file' },
+				checkBlock: { selectId: 'opfsCheckBlockFile', dirs: ['blocks', 'verify'], label: 'block file' },
+				loadHashes: { selectId: 'opfsHashesFile', dirs: ['hashes'], label: 'hash file' },
+				updateHashes: { selectId: 'opfsHashesFileUpd', dirs: ['hashes'], label: 'hash file' }
+			};
+			const config = mapping[sectionId];
+			if (!config) return;
+			const select = document.getElementById(config.selectId);
+			select.innerHTML = `<option value="">-- Select a ${config.label} --</option>`;
+			for (const dir of config.dirs) {
+				const files = await opfs.listFiles(dir);
+				for (const name of files) {
+					const opt = document.createElement('option');
+					opt.value = `${dir}/${name}`;
+					opt.textContent = `${dir}/${name}`;
+					select.appendChild(opt);
+				}
+			}
+		}
+
+		// Get file from OPFS select dropdown
+		async function getOpfsFile(selectId) {
+			const select = document.getElementById(selectId);
+			if (!select || !select.value) return null;
+			const [dir, ...nameParts] = select.value.split('/');
+			return await opfs.readFile(dir, nameParts.join('/'));
+		}
+
 		// RPC endpoint presets
 		const rpcPresets = {
 			publicnode: {
@@ -527,6 +559,7 @@
 				if (sectionId === 'fileManager') {
 					fmRefreshList();
 				}
+				populateOpfsSelects(sectionId);
 			},
 
 			displayResults(text) {
@@ -692,12 +725,12 @@
 
 		// Main functionality
 		async function showTransactions(fileArg) {
-			const file = fileArg || document.getElementById('blockFile').files[0];
+			const file = fileArg || await getOpfsFile('opfsBlockFile');
 			const address = document.getElementById('address').value;
 			const showAllAddresses = document.getElementById('showAllAddresses').checked;
 
 			if (!file) {
-				alert('Please select a block file');
+				alert('Please select a block file. Import files via File Manager first.');
 				return;
 			}
 
@@ -765,9 +798,9 @@
 		}
 
 		async function loadBlockHashes(fileArg) {
-			const file = fileArg || document.getElementById('hashesFile').files[0];
+			const file = fileArg || await getOpfsFile('opfsHashesFile');
 			if (!file) {
-				alert('Please select a block hashes file');
+				alert('Please select a hash file. Import files via File Manager first.');
 				return;
 			}
 			// Revoke previous object URL to prevent memory leak
@@ -854,9 +887,9 @@
 		}
 
 		async function checkBlock(fileArg) {
-			const file = fileArg || document.getElementById('checkBlockFile').files[0];
+			const file = fileArg || await getOpfsFile('opfsCheckBlockFile');
 			if (!file) {
-				alert('Please select a block file');
+				alert('Please select a block file. Import files via File Manager first.');
 				return;
 			}
 			try {
@@ -941,17 +974,14 @@
 		}
 		async function updateBlockHashFile() {
 			utilityFunctions.clearResults();
-			const fileInput = document.getElementById('hashesFileUpd');
-			if (!fileInput.files.length) {
-				alert('Please select a file to update.');
+			const file = await getOpfsFile('opfsHashesFileUpd');
+			if (!file) {
+				alert('Please select a hash file. Import files via File Manager first.');
 				return;
 			}
 
-			const file = fileInput.files[0];
-			const reader = new FileReader();
-
-			reader.onload = async function (e) {
-				const content = e.target.result;
+			try {
+				const content = await file.text();
 				const lines = content.trim().split('\n');
 				let lastBlockHeight = 0;  // Default to 0 for empty files
 
@@ -963,13 +993,13 @@
 
 				const rpcConfig = getRpcConfig();
 				const fetcher = new BitcoinBlockHashFetcher(rpcConfig.url, rpcConfig.username, rpcConfig.password);
+				const progressBar = document.getElementById('progressBar');
+				const progressContainer = document.getElementById('progressContainer');
 				try {
 					const latestBlockHeight = await fetcher.getLatestBlockHeight();
 					let newContent = content.trim();  // Remove any trailing newlines
 					utilityFunctions.displayResults(`Ending at block ${latestBlockHeight}\n`);
 
-					const progressBar = document.getElementById('progressBar');
-					const progressContainer = document.getElementById('progressContainer');
 					progressContainer.style.display = 'block';
 
 					for (let height = lastBlockHeight + 1; height <= latestBlockHeight; height++) {
@@ -1007,9 +1037,10 @@
 				} finally {
 					progressContainer.style.display = 'none';
 				}
-			};
-
-			reader.readAsText(file);
+			} catch (error) {
+				console.error('Error reading hash file:', error);
+				utilityFunctions.displayResults('Error reading the hash file.');
+			}
 		}
 
 		// Initialize
